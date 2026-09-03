@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="light">
+<head>
+  <meta charset="UTF-8">
+  <!-- iPhone 與行動端最適化 Meta -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>SmartPay 支出記帳</title>
+  
+  <!-- iOS 桌面 App 模式 (PWA 體驗) -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="SmartPay">
+  <meta name="theme-color" content="#4f46e5">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- 自訂 iOS 適配樣式 -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 min-h-screen transition-colors duration-200 select-none pb-24 sm:pb-8">
+
+  <!-- Toast 訊息通知容器 -->
+  <div id="toastContainer" class="fixed top-5 left-1/2 -translate-x-1/2 sm:left-auto sm:translate-x-0 sm:right-5 z-50 flex flex-col gap-2 pointer-events-none w-11/12 sm:w-auto max-w-sm"></div>
+
+  <!-- 頂部導覽列 (支援 iPhone 瀏海與動態島 safe-area) -->
+  <header class="sticky top-0 z-30 border-b border-slate-200/80 dark:border-slate-800 glassmorphism transition-colors safe-top">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+      <!-- 品牌 Logo -->
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+          <i data-lucide="wallet-cards" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <h1 class="text-base font-bold tracking-tight text-slate-900 dark:text-white leading-none">SmartPay</h1>
+          <span class="text-[11px] text-slate-400 font-medium">個人支出管理</span>
+        </div>
+      </div>
+
+      <!-- 月份選擇與切換快捷列 -->
+      <div class="flex items-center bg-slate-100 dark:bg-slate-800/90 p-1 rounded-2xl border border-slate-200/70 dark:border-slate-700">
+        <button id="prevMonthBtn" title="上個月" class="p-1 rounded-xl text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700 transition">
+          <i data-lucide="chevron-left" class="w-4 h-4"></i>
+        </button>
+        <div class="flex items-center px-1.5 gap-1 text-sm font-semibold">
+          <select id="filterYear" class="bg-transparent text-slate-700 dark:text-slate-200 text-xs font-bold focus:outline-none cursor-pointer">
+          </select>
+          <select id="filterMonth" class="bg-transparent text-slate-700 dark:text-slate-200 text-xs font-bold focus:outline-none cursor-pointer">
+            <option value="1">1 月</option>
+            <option value="2">2 月</option>
+            <option value="3">3 月</option>
+            <option value="4">4 月</option>
+            <option value="5">5 月</option>
+            <option value="6">6 月</option>
+            <option value="7">7 月</option>
+            <option value="8">8 月</option>
+            <option value="9">9 月</option>
+            <option value="10">10 月</option>
+            <option value="11">11 月</option>
+            <option value="12">12 月</option>
+          </select>
+        </div>
+        <button id="nextMonthBtn" title="下個月" class="p-1 rounded-xl text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700 transition">
+          <i data-lucide="chevron-right" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- 工具按鈕區 -->
+      <div class="flex items-center gap-1.5">
+        <!-- 主題切換按鈕 -->
+        <button id="themeToggleBtn" title="切換深淺模式" class="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 shadow-sm active:scale-95 transition">
+          <i data-lucide="sun" class="w-4 h-4 hidden dark:block"></i>
+          <i data-lucide="moon" class="w-4 h-4 block dark:hidden"></i>
+        </button>
+
+        <!-- 資料備份管理按鈕 -->
+        <button id="openDataModalBtn" title="資料備份" class="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 shadow-sm active:scale-95 transition">
+          <i data-lucide="database" class="w-4 h-4"></i>
+        </button>
+
+        <!-- 電腦版新增記帳按鈕 -->
+        <button id="openAddModalBtn" class="hidden sm:flex items-center gap-1 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-md shadow-indigo-500/20 active:scale-95 transition">
+          <i data-lucide="plus" class="w-4 h-4"></i>
+          <span>記一筆</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主內容區 -->
+  <main class="max-w-4xl mx-auto px-4 sm:px-6 py-5 space-y-5">
+
+    <!-- 頂部卡片區：本月總支出 + 本月預算 -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <!-- 總支出卡片 -->
+      <div class="p-5 rounded-3xl bg-white dark:bg-slate-800/80 border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-400">本月總支出</span>
+          <div class="w-8 h-8 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center">
+            <i data-lucide="credit-card" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div class="mt-3">
+          <div id="statTotalExpense" class="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">NT$ 0</div>
+          <span class="text-xs text-slate-400 mt-1 block font-medium">當月所有消費開銷加總</span>
+        </div>
+      </div>
+
+      <!-- 預算進度卡片 -->
+      <div class="p-5 rounded-3xl bg-white dark:bg-slate-800/80 border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-1.5">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-400">本月預算進度</span>
+            <button id="openBudgetModalBtn" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-0.5 font-bold">
+              <i data-lucide="pencil" class="w-3 h-3"></i> 設定
+            </button>
+          </div>
+          <span id="budgetStatusBadge" class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">良好</span>
+        </div>
+        <div class="mt-3">
+          <div class="flex justify-between items-baseline mb-1.5">
+            <span id="budgetSpentDisplay" class="text-base font-bold text-slate-800 dark:text-slate-100">NT$ 0</span>
+            <span class="text-xs text-slate-400 font-medium">/ <span id="budgetTotalDisplay">NT$ 15,000</span></span>
+          </div>
+          <div class="w-full bg-slate-100 dark:bg-slate-700 h-2.5 rounded-full overflow-hidden">
+            <div id="budgetProgressBar" class="h-full bg-indigo-600 rounded-full transition-all duration-500" style="width: 0%"></div>
+          </div>
+          <div class="flex justify-between text-xs text-slate-400 mt-1.5 font-medium">
+            <span>剩餘: <span id="budgetRemainingDisplay" class="font-bold text-slate-700 dark:text-slate-200">NT$ 0</span></span>
+            <span id="budgetPercentText" class="font-bold text-slate-700 dark:text-slate-200">0%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 即時數據：支出分類佔比 (甜甜圈圖 + 中央總金額) -->
+    <div class="p-6 rounded-3xl bg-white dark:bg-slate-800/80 border border-slate-100 dark:border-slate-800 shadow-sm">
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-2">
+          <i data-lucide="pie-chart" class="w-4 h-4 text-indigo-600 dark:text-indigo-400"></i>
+          <h2 class="text-sm sm:text-base font-bold text-slate-900 dark:text-white">支出分類佔比</h2>
+        </div>
+        <span class="text-xs text-slate-400 font-medium">即時統計</span>
+      </div>
+
+      <div class="relative h-[270px] flex items-center justify-center">
+        <!-- 甜甜圈圖 Canvas -->
+        <div id="categoryChartWrapper" class="w-full h-full relative transition-opacity duration-300">
+          <canvas id="categoryChart"></canvas>
+          <!-- 中央金額提示 -->
+          <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none pb-12">
+            <span class="text-[11px] text-slate-400 font-semibold">當月支出</span>
+            <span id="chartCenterTotal" class="text-sm font-extrabold text-slate-800 dark:text-slate-100">NT$ 0</span>
+          </div>
+        </div>
+        <!-- 空資料狀態 -->
+        <div id="categoryChartEmpty" class="absolute inset-0 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 hidden">
+          <i data-lucide="pie-chart" class="w-10 h-10 mb-2 opacity-30"></i>
+          <p class="text-xs font-medium">本月尚無支出數據</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 支出紀錄列表區塊 -->
+    <div class="p-5 sm:p-6 rounded-3xl bg-white dark:bg-slate-800/80 border border-slate-100 dark:border-slate-800 shadow-sm space-y-4">
+      
+      <!-- 頂部分類快速過濾標籤列 (支援手機手指水平滑動) -->
+      <div class="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1" id="categoryFilterTabs">
+        <!-- 由 app.js 動態渲染 -->
+      </div>
+
+      <!-- 搜尋列與筆數提示 -->
+      <div class="flex items-center gap-2">
+        <div class="relative flex-1">
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+          <input type="text" id="searchInput" placeholder="搜尋分類、備註或支付方式..." class="w-full pl-9 pr-4 py-2 text-xs rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+        <span id="transactionCountBadge" class="text-xs px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 font-bold shrink-0">
+          0 筆
+        </span>
+      </div>
+
+      <!-- 交易紀錄清單 -->
+      <div id="transactionsList" class="space-y-2.5 pt-1">
+        <!-- 由 app.js 動態渲染 -->
+      </div>
+    </div>
+  </main>
+
+  <!-- iPhone / 行動端 懸浮快速記帳按鈕 (右下角圓形 FAB，單手拇指最順手位置) -->
+  <div class="fixed right-5 bottom-7 z-40 sm:hidden">
+    <button id="mobileFloatingAddBtn" class="w-14 h-14 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-xl shadow-indigo-600/30 active:scale-90 transition transform">
+      <i data-lucide="plus" class="w-7 h-7"></i>
+    </button>
+  </div>
+
+  <!-- ==================== 彈出視窗 (Modals) ==================== -->
+
+  <!-- 1. 新增 / 編輯 支出 Modal -->
+  <div id="transactionModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
+    <div class="bg-white dark:bg-slate-800 rounded-t-3xl sm:rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 dark:border-slate-700 animate-modal-pop max-h-[92vh] overflow-y-auto">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-700">
+        <h3 id="transactionModalTitle" class="text-base font-bold text-slate-900 dark:text-white">新增一筆支出</h3>
+        <button id="closeModalBtn" class="p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 bg-slate-100 dark:bg-slate-700">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <form id="transactionForm" class="mt-4 space-y-4">
+        <!-- 金額輸入 -->
+        <div>
+          <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">支出金額 (NT$)</label>
+          <div class="relative">
+            <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-black text-xl">$</span>
+            <input type="number" id="txAmount" step="1" min="1" placeholder="0" required class="w-full pl-9 pr-4 py-3 text-2xl font-black rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+        </div>
+
+        <!-- 常用分類選擇 -->
+        <div>
+          <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">常用分類</label>
+          <div id="categoryPills" class="flex flex-wrap gap-2">
+            <!-- 動態生成分類標籤 (餐食、飲料、油錢、停車費、購物、娛樂、其他支出) -->
+          </div>
+        </div>
+
+        <!-- 支付方式 -->
+        <div>
+          <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">支付方式</label>
+          <div id="accountPills" class="flex flex-wrap gap-1.5">
+            <!-- 動態生成 (現金、信用卡、LINEPAY、7-11OPENPOINT、全家全盈配) -->
+          </div>
+        </div>
+
+        <!-- 日期 -->
+        <div>
+          <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">日期</label>
+          <input type="date" id="txDate" required class="w-full px-4 py-2.5 text-sm rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+
+        <!-- 備註說明 -->
+        <div>
+          <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">備註說明 (選填)</label>
+          <input type="text" id="txNote" placeholder="例如：拿鐵大杯、午餐排骨飯..." class="w-full px-4 py-2.5 text-sm rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+
+        <!-- 按鈕區 -->
+        <div class="flex gap-3 pt-2">
+          <button type="button" id="cancelModalBtn" class="flex-1 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-700 active:scale-95 transition">
+            取消
+          </button>
+          <button type="submit" class="flex-1 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold shadow-lg shadow-indigo-500/25 active:scale-95 transition">
+            儲存支出
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 2. 每月預算設定 Modal -->
+  <div id="budgetModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="bg-white dark:bg-slate-800 rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-100 dark:border-slate-700 animate-modal-pop">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-700">
+        <h3 class="text-base font-bold text-slate-900 dark:text-white">設定每月支出預算</h3>
+        <button id="closeBudgetModalBtn" class="p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 bg-slate-100 dark:bg-slate-700">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+      <form id="budgetForm" class="mt-4 space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5">預算金額 (NT$)</label>
+          <div class="relative">
+            <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-black">$</span>
+            <input type="number" id="budgetAmountInput" min="0" step="500" required class="w-full pl-8 pr-4 py-2.5 text-lg font-bold rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+          <p class="text-xs text-slate-400 mt-1.5 font-medium">系統將即時計算本月花費百分比與超支警示。</p>
+        </div>
+        <div class="flex gap-3 pt-2">
+          <button type="button" id="cancelBudgetModalBtn" class="flex-1 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-slate-50 active:scale-95 transition">
+            取消
+          </button>
+          <button type="submit" class="flex-1 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md active:scale-95 transition">
+            儲存預算
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3. 資料管理與備份 Modal -->
+  <div id="dataModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="bg-white dark:bg-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 dark:border-slate-700 animate-modal-pop">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-700">
+        <h3 class="text-base font-bold text-slate-900 dark:text-white">資料備份與管理</h3>
+        <button id="closeDataModalBtn" class="p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 bg-slate-100 dark:bg-slate-700">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <div class="mt-4 space-y-3">
+        <!-- 匯出區塊 -->
+        <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-700/60 space-y-2">
+          <span class="text-xs font-bold text-slate-500 dark:text-slate-400 block">匯出資料</span>
+          <div class="grid grid-cols-2 gap-2">
+            <button id="exportCsvBtn" class="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold hover:border-indigo-400 text-slate-700 dark:text-slate-200 shadow-sm active:scale-95 transition">
+              <i data-lucide="file-spreadsheet" class="w-4 h-4 text-emerald-600"></i>
+              <span>匯出 CSV (Excel)</span>
+            </button>
+            <button id="exportJsonBtn" class="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold hover:border-indigo-400 text-slate-700 dark:text-slate-200 shadow-sm active:scale-95 transition">
+              <i data-lucide="file-code" class="w-4 h-4 text-indigo-600"></i>
+              <span>匯出 JSON 備份</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 匯入區塊 -->
+        <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-700/60 space-y-2">
+          <span class="text-xs font-bold text-slate-500 dark:text-slate-400 block">匯入與還原</span>
+          <input type="file" id="jsonFileInput" accept=".json" class="hidden">
+          <button id="triggerImportBtn" class="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 text-xs font-bold hover:bg-indigo-100 active:scale-95 transition">
+            <i data-lucide="upload-cloud" class="w-4 h-4"></i>
+            <span>選取 JSON 備份檔進行匯入</span>
+          </button>
+        </div>
+
+        <!-- 危險區塊 -->
+        <div class="p-4 rounded-2xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200/60 dark:border-rose-900/40 space-y-2">
+          <span class="text-xs font-bold text-rose-600 dark:text-rose-400 block">重設與清空</span>
+          <div class="grid grid-cols-2 gap-2">
+            <button id="resetSampleDataBtn" class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 active:scale-95">
+              重設範例資料
+            </button>
+            <button id="clearAllDataBtn" class="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold active:scale-95 transition">
+              清空所有紀錄
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript 模組 -->
+  <script src="js/storage.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
