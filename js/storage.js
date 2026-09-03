@@ -6,7 +6,8 @@ const STORAGE_KEYS = {
   TRANSACTIONS: 'bk_transactions_data',
   CATEGORIES: 'bk_categories_data',
   BUDGET: 'bk_monthly_budget',
-  THEME: 'bk_theme_mode'
+  THEME: 'bk_theme_mode',
+  INITIALIZED: 'bk_app_has_initialized'
 };
 
 // 指定支出分類項目
@@ -105,16 +106,25 @@ function generateSampleTransactions() {
 const Storage = {
   // 取得所有支出紀錄
   getTransactions() {
+    const initialized = localStorage.getItem(STORAGE_KEYS.INITIALIZED);
     const data = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
-    if (!data) {
+
+    // 只有在第一次全新進入時才載入範例資料
+    if (!initialized) {
       const initial = generateSampleTransactions();
       this.saveTransactions(initial);
+      localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
       return initial;
     }
+
+    if (!data) {
+      return [];
+    }
+
     try {
       return JSON.parse(data);
     } catch (e) {
-      console.error('解析資料失敗，重設為空列表', e);
+      console.error('解析資料失敗', e);
       return [];
     }
   },
@@ -122,6 +132,7 @@ const Storage = {
   // 儲存所有支出紀錄
   saveTransactions(transactions) {
     localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
+    localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
   },
 
   // 新增一筆支出
@@ -240,7 +251,6 @@ const Storage = {
 
   // 清空所有資料
   clearAll() {
-    localStorage.removeItem(STORAGE_KEYS.TRANSACTIONS);
-    localStorage.removeItem(STORAGE_KEYS.BUDGET);
+    this.saveTransactions([]);
   }
 };
